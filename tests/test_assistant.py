@@ -64,6 +64,15 @@ def test_off_topic_question_never_reaches_the_llm():
     assert llm.calls == []
 
 
+def test_gate_uses_the_best_similarity_not_the_first_chunk():
+    # After reranking the first chunk can have a lower similarity than a later
+    # one; the question is still on topic if any chunk clears the bar.
+    assistant, llm = make([chunk(24, 0.20), chunk(21, 0.33)],
+                          LLMAnswer(found=True, answer="A final mark of 70% and above.", pages=[24]))
+    assert assistant.ask("What mark do I need to get placed?").source == "Page 24"
+    assert len(llm.calls) == 1
+
+
 def test_empty_retrieval_is_not_found():
     assistant, llm = make([])
     assert assistant.ask("anything").answer == config.NOT_FOUND_ANSWER

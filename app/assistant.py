@@ -30,8 +30,10 @@ class HandbookAssistant:
     def ask(self, question: str) -> Answer:
         chunks = self._retriever.search(question)
 
-        # Nothing in the handbook is even close - don't spend an API call on it.
-        if not chunks or chunks[0].similarity < self._min_similarity:
+        # Nothing in the handbook is even close - don't spend an LLM call on it.
+        # (max, not chunks[0]: after reranking the first chunk isn't always the
+        # one with the highest similarity.)
+        if not chunks or max(c.similarity for c in chunks) < self._min_similarity:
             return NOT_FOUND
 
         result = self._llm.answer(question, chunks)

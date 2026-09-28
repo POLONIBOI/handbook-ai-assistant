@@ -11,19 +11,26 @@ class RetrievedChunk:
     page: int
     section: str
     similarity: float  # cosine similarity, 1.0 = identical meaning
+    rerank_score: float | None = None  # filled in by app/reranker.py
 
 
 class Retriever:
-    def __init__(self, collection=None, embed=None, top_k: int = config.TOP_K):
+    def __init__(self, collection=None, embed=None, top_k: int = config.TOP_K, rerank=None):
         if collection is None:
             from app.vector_store import get_collection
 
             collection = get_collection()
         if embed is None:
             from app.embeddings import embed_query as embed
+        if rerank is None:
+            # rerank=False keeps plain similarity order (used by the eval script)
+            from app.reranker import rerank as default_rerank
+
+            rerank = default_rerank if config.RERANK_MODEL else False
 
         self._collection = collection
         self._embed = embed
+        self._rerank = rerank
         self.top_k = top_k
 
     def search(self, question: str) -> list[RetrievedChunk]:
@@ -33,7 +40,7 @@ class Retriever:
             n_results=self.top_k,
             include=["documents", "metadatas", "distances"],
         )
-        return [
+        hits = [
             RetrievedChunk(
                 text=doc,
                 page=int(meta["page"]),
@@ -45,3 +52,4 @@ class Retriever:
                 result["documents"][0], result["metadatas"][0], result["distances"][0]
             )
         ]
+        return self._rerank(question, hits) if self._rerank else hits

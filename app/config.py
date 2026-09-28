@@ -21,7 +21,18 @@ COLLECTION_NAME = "handbook"
 # Small, fast, runs on CPU. 384-dim vectors.
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
+# "auto" uses Claude when ANTHROPIC_API_KEY is set and the local model otherwise.
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "auto").lower()
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5")
+
+# The no-key fallback (app/local_llm.py). It has to fit in 8 GB of RAM next
+# to everything else, which rules out models much bigger than 1B parameters.
+LOCAL_MODEL = os.getenv("LOCAL_MODEL", "Qwen/Qwen3-0.6B")
+LOCAL_MAX_EXCERPTS = 3
+LOCAL_MAX_NEW_TOKENS = 200
+# The local model answers almost anything it's asked, so it's only asked when
+# the reranker thinks an excerpt fits (best score 0 or more).
+LOCAL_MIN_RERANK_SCORE = 0.0
 
 # Pages in this handbook are short (60-1500 characters), so a chunk of ~600
 # characters is usually one or two paragraphs - enough to hold a complete
@@ -33,6 +44,10 @@ CHUNK_OVERLAP_SENTENCES = 1
 # the top hit 24 times, in the top 4 for 27 and in the top 5 for all 28.
 # The miss at 4 is "What mark do I need to get placed?" - page 24 comes 5th.
 TOP_K = 5
+
+# Reorders those 5 chunks so the one that answers the question comes first
+# (see app/reranker.py). RERANK_MODEL= (empty) switches it off.
+RERANK_MODEL = os.getenv("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 # If even the best chunk scores below this, the question isn't about the
 # handbook ("what is the capital of France?" scores 0.10) and we answer

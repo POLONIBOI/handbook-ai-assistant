@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import config
 from app.assistant import HandbookAssistant
-from app.llm import LLMError, MissingAPIKeyError
+from app.llm import LLMError, MissingAPIKeyError, describe_llm
 from app.vector_store import IndexNotBuiltError
 
 log = logging.getLogger("handbook.api")
@@ -54,10 +54,10 @@ class ErrorResponse(BaseModel):
 def get_assistant() -> HandbookAssistant:
     # Built on the first request, not at import time, so the server still
     # starts (and /health can explain the problem) if the index is missing.
-    from app.llm import ClaudeAnswerer
+    from app.llm import make_answerer
     from app.retriever import Retriever
 
-    return HandbookAssistant(Retriever(), ClaudeAnswerer())
+    return HandbookAssistant(Retriever(), make_answerer())
 
 
 def error(status: int, message: str) -> JSONResponse:
@@ -86,7 +86,7 @@ def health():
         chunks = get_collection().count()
     except IndexNotBuiltError as exc:
         return error(503, str(exc))
-    return {"status": "ok", "chunks": chunks}
+    return {"status": "ok", "chunks": chunks, "llm": describe_llm()}
 
 
 # --- error handling -------------------------------------------------------

@@ -35,19 +35,24 @@ def test_best_match_is_the_right_page(retriever, question, page):
     assert retriever.search(question)[0].page == page
 
 
-def test_harder_question_is_within_top_k(retriever):
-    # Page 24 only comes 5th here, which is why TOP_K is 5 and not 4.
-    pages = [c.page for c in retriever.search("What mark do I need to get placed at a company?")]
-    assert 24 in pages
+def test_harder_question_is_within_top_k():
+    # By similarity alone page 24 only comes 5th here, which is why TOP_K is 5 and not 4.
+    pages = [c.page for c in Retriever(rerank=False).search("What mark do I need to get placed at a company?")]
+    assert pages.index(24) == 4
 
 
-def test_results_are_sorted_and_carry_metadata(retriever):
+def test_reranking_moves_page_24_to_first(retriever):
+    assert retriever.search("What mark do I need to get placed at a company?")[0].page == 24
+
+
+def test_results_are_reranked_and_carry_metadata(retriever):
     hits = retriever.search("How much does the bootcamp cost?")
     assert len(hits) == config.TOP_K
-    assert hits == sorted(hits, key=lambda h: h.similarity, reverse=True)
+    assert all(h.rerank_score is not None for h in hits)
+    assert hits == sorted(hits, key=lambda h: h.rerank_score, reverse=True)
     assert hits[0].section == "Fees"
 
 
 @pytest.mark.parametrize("question", ["What is the capital of France?", "How do I cook pasta?"])
 def test_off_topic_questions_fall_under_the_threshold(retriever, question):
-    assert retriever.search(question)[0].similarity < config.MIN_SIMILARITY
+    assert max(h.similarity for h in retriever.search(question)) < config.MIN_SIMILARITY

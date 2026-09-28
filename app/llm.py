@@ -1,6 +1,17 @@
-"""Part 2 (generation): ask Claude to answer from the retrieved chunks only."""
+"""Part 2 (generation): write the answer from the retrieved chunks only.
+
+Two answerers with the same interface, answer(question, chunks) -> LLMAnswer:
+
+- ClaudeAnswerer: Claude through the Anthropic API. Used whenever an
+  ANTHROPIC_API_KEY is set.
+- LocalAnswerer (app/local_llm.py): a small open model on the CPU, so the
+  project also runs, free, on a machine without a key.
+
+make_answerer() picks one based on LLM_PROVIDER (see app/config.py).
+"""
 
 import json
+import os
 from dataclasses import dataclass, field
 
 import anthropic
@@ -43,7 +54,8 @@ class LLMError(RuntimeError):
 
 class MissingAPIKeyError(LLMError):
     def __init__(self):
-        super().__init__("ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key.")
+        super().__init__("ANTHROPIC_API_KEY is not set. Add it to .env, or set LLM_PROVIDER=local "
+                         "to use the local model instead.")
 
 
 @dataclass
@@ -61,6 +73,8 @@ def build_prompt(question: str, chunks: list[RetrievedChunk]) -> str:
 
 
 class ClaudeAnswerer:
+    name = "claude"
+
     def __init__(self, client: anthropic.Anthropic | None = None, model: str = config.CLAUDE_MODEL):
         # Reads ANTHROPIC_API_KEY from the environment / .env
         self._client = client or anthropic.Anthropic()
@@ -102,3 +116,27 @@ class ClaudeAnswerer:
         except json.JSONDecodeError as exc:
             raise LLMError(f"Unexpected response from Claude (stop_reason={response.stop_reason})") from exc
         return LLMAnswer(found=data["found"], answer=data["answer"], pages=data["pages"])
+
+
+def resolve_provider(provider: str = config.LLM_PROVIDER) -> str:
+    """"claude", "local", or "auto" (Claude if a key is set, otherwise local)."""
+    if provider == "auto":
+        return "claude" if os.getenv("ANTHROPIC_API_KEY") else "local"
+    if provider not in ("claude", "local"):
+        raise ValueError(f"LLM_PROVIDER must be 'auto', 'claude' or 'local', not {provider!r}")
+    return provider
+
+
+def describe_llm(provider: str = config.LLM_PROVIDER) -> str:
+    """For /health and the test report, e.g. "local: Qwen/Qwen3-0.6B"."""
+    if resolve_provider(provider) == "claude":
+        return f"claude: {config.CLAUDE_MODEL}"
+    return f"local: {config.LOCAL_MODEL}"
+
+
+def make_answerer(provider: str = config.LLM_PROVIDER):
+    if resolve_provider(provider) == "claude":
+        return ClaudeAnswerer()
+    from app.local_llm import LocalAnswerer
+
+    return LocalAnswerer()

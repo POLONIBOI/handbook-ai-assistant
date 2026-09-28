@@ -5,7 +5,9 @@ import anthropic
 import httpx2
 import pytest
 
-from app.llm import ANSWER_SCHEMA, ClaudeAnswerer, LLMError, MissingAPIKeyError, build_prompt
+from app import llm
+from app.llm import (ANSWER_SCHEMA, ClaudeAnswerer, LLMError, MissingAPIKeyError, build_prompt,
+                     make_answerer)
 from app.retriever import RetrievedChunk
 
 CHUNKS = [
@@ -94,3 +96,37 @@ def test_api_failure_raises_llm_error():
 def test_missing_api_key_is_reported_up_front():
     with pytest.raises(MissingAPIKeyError, match="ANTHROPIC_API_KEY"):
         ClaudeAnswerer(FakeClient(api_key=None))
+
+
+# --- choosing the LLM -------------------------------------------------------
+
+class FakeLocal:
+    name = "local"
+
+
+@pytest.fixture
+def no_model_download(monkeypatch):
+    import app.local_llm
+
+    monkeypatch.setattr(app.local_llm, "LocalAnswerer", FakeLocal)
+
+
+def test_auto_uses_the_local_model_without_a_key(monkeypatch, no_model_download):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert make_answerer("auto").name == "local"
+
+
+def test_auto_uses_claude_when_a_key_is_set(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setattr(llm, "ClaudeAnswerer", lambda: SimpleNamespace(name="claude"))
+    assert make_answerer("auto").name == "claude"
+
+
+def test_local_can_be_forced_even_with_a_key(monkeypatch, no_model_download):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    assert make_answerer("local").name == "local"
+
+
+def test_unknown_provider_is_an_error():
+    with pytest.raises(ValueError, match="LLM_PROVIDER"):
+        make_answerer("gpt")
